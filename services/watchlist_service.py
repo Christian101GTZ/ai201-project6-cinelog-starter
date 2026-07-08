@@ -7,7 +7,7 @@ LATER (as opposed to the collection, which is films already watched). Like the
 collection service, it sits between the web routes and the database.
 
 What it provides:
-  - save_to_watchlist(...) : add a film to the watchlist (does NOT block duplicates)
+  - add_to_watchlist(...)  : add a film to the watchlist (does NOT block duplicates)
   - get_watchlist(...)     : list a user's saved films, sorted A–Z by title
 
 It reuses FilmNotFoundError from the collection service rather than defining
@@ -21,7 +21,7 @@ from models import Film, WatchlistEntry  # the two tables this file works with
 from services.collection_service import FilmNotFoundError
 
 
-def save_to_watchlist(user_id, film_id):
+def add_to_watchlist(user_id, film_id):
     """
     Save a film to a user's watchlist.
 
