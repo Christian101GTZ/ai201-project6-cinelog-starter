@@ -15,12 +15,32 @@ find-all-references) after the change — 0 matches remain. Ran `pytest tests/ -
 all 4 existing tests still pass, confirming nothing else referenced the old name.
 
 ## Comment 2 — Deduplication
-**What I did:**
-**How I verified:**
+**What I did:** Added a duplicate guard to `add_to_watchlist()` in
+`services/watchlist_service.py`, following the pattern in `add_to_collection()`.
+Defined a parallel error class `AlreadyInWatchlistError`, then—between the
+`FilmNotFoundError` check and the insert—queried
+`WatchlistEntry.query.filter_by(user_id=..., film_id=...).first()` and raised
+`AlreadyInWatchlistError` if a row already exists. The check runs before
+`db.session.add(...)`, so no duplicate is ever written. Also updated the
+docstring `Raises:` section.
+
+**How I verified:** Confirmed the new check sits above the insert (mirrors
+`add_to_collection`, collection_service.py lines 52-58). Added
+`test_add_to_watchlist_duplicate_raises` (see Comment 3) which asserts a second
+add raises `AlreadyInWatchlistError` and that exactly one row exists afterward.
+`pytest tests/ -v` passes.
 
 ## Comment 3 — Missing test
-**What I did:**
-**How I verified:**
+**What I did:** Created `tests/test_watchlist.py`, reusing the fixture pattern
+from `test_collection.py` (`app` / `sample_user` / `sample_film`). Modeled the
+required test on `test_add_to_collection_nonexistent_film_raises`: wrote
+`test_add_to_watchlist_nonexistent_film_raises`, which passes a film_id that
+doesn't exist and asserts `add_to_watchlist` raises `FilmNotFoundError` (via
+`pytest.raises`). Also added a happy-path test and a duplicate test to cover
+the Comment 2 behavior.
+
+**How I verified:** `pytest tests/test_watchlist.py -v` → 3 passed.
+`pytest tests/ -v` (full suite) → 7 passed.
 
 ## Comment 4 — Default visibility
 **My position:**
