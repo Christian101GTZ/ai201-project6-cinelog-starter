@@ -7,7 +7,7 @@ LATER (as opposed to the collection, which is films already watched). Like the
 collection service, it sits between the web routes and the database.
 
 What it provides:
-  - add_to_watchlist(...)  : add a film to the watchlist (does NOT block duplicates)
+  - add_to_watchlist(...)  : add a film to the watchlist (blocks duplicates)
   - get_watchlist(...)     : list a user's saved films, sorted A–Z by title
 
 It reuses FilmNotFoundError from the collection service rather than defining
@@ -19,6 +19,11 @@ from models import Film, WatchlistEntry  # the two tables this file works with
 # Reuse the same "film doesn't exist" error the collection service defines,
 # instead of creating a second, duplicate one.
 from services.collection_service import FilmNotFoundError
+
+
+class AlreadyInWatchlistError(Exception):
+    """Raised when a film is already on the user's watchlist."""
+    pass
 
 
 def add_to_watchlist(user_id, film_id):
@@ -34,15 +39,24 @@ def add_to_watchlist(user_id, film_id):
 
     Raises:
         FilmNotFoundError: If film_id does not exist.
+        AlreadyInWatchlistError: If the film is already on the user's watchlist.
     """
     # Look up the film by its ID. If it doesn't exist, stop here.
     film = db.session.get(Film, film_id)
     if film is None:
         raise FilmNotFoundError(f"No film found with id '{film_id}'")
 
+    # Check whether this user already has this film on their watchlist.
+    # .first() returns the existing row, or None if there isn't one.
+    existing = WatchlistEntry.query.filter_by(
+        user_id=user_id, film_id=film_id
+    ).first()
+    if existing:
+        raise AlreadyInWatchlistError(
+            f"Film '{film_id}' is already on this user's watchlist"
+        )
+
     # Create the watchlist entry and save it.
-    # NOTE: unlike the collection, this does NOT check for duplicates,
-    # so the same film can be saved to a watchlist more than once.
     entry = WatchlistEntry(user_id=user_id, film_id=film_id)
     db.session.add(entry)
     db.session.commit()
