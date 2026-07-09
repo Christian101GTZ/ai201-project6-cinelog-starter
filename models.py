@@ -120,8 +120,9 @@ class WatchlistEntry(db.Model):
     film_id = db.Column(db.String(36), db.ForeignKey("film.id"), nullable=False)
     # When it was saved. Defaults to now.
     date_added = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    # Whether other people can see this watchlist item. Defaults to visible.
-    public = db.Column(db.Boolean, default=True)
+    # Whether other people can see this watchlist item. Defaults to PRIVATE —
+    # users opt in to sharing (principle of least surprise / privacy by default).
+    public = db.Column(db.Boolean, default=False)
 
     # Turns this entry into a plain dictionary (for JSON responses).
     def to_dict(self):

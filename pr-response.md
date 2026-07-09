@@ -1,7 +1,23 @@
 # PR Response Doc — CineLog Watchlist Feature
 
 ## AI Usage
-<!-- Fill in at the end — how you used AI tools during this project -->
+<!-- REVIEW AND EDIT THIS to reflect your own honest account before submitting. -->
+
+- **Orientation:** Used AI to summarize `models.py`, `collection_service.py`,
+  and `test_collection.py`, to walk through `add_to_collection()` step by step,
+  and to explain the test structure. Verified the summaries against the code.
+- **Comment 1 (rename):** AI performed the rename and found the call site; I
+  reviewed the project-wide search result.
+- **Comment 2 (deduplication):** AI wrote the duplicate-check and
+  `AlreadyInWatchlistError`. NOTE: the course asks this be my own work — I should
+  re-type it from the explanation and understand each line before submitting.
+- **Comment 3 (test):** AI wrote `tests/test_watchlist.py` following the
+  `test_collection.py` pattern.
+- **Comments 4 & 5 (design decisions):** AI laid out the tradeoffs and gave
+  recommendations; I chose the positions (private default; date-added order).
+  AI drafted the write-ups — these are marked DRAFT and I need to rewrite them
+  in my own words, since the course requires the reasoning to be mine.
+- **Comment 6 (rebase):** AI ran the rebase and resolved the UUID conflict.
 
 ## Comment 1 — Rename
 **What I did:** Renamed `save_to_watchlist()` to `add_to_watchlist()` in
@@ -43,14 +59,50 @@ the Comment 2 behavior.
 `pytest tests/ -v` (full suite) → 7 passed.
 
 ## Comment 4 — Default visibility
-**My position:**
-**Reasoning:**
-**Tradeoff acknowledged:**
+> DRAFT — rewrite in my own words before submitting (see AI Usage note).
+
+**My position:** Watchlists should default to **private** (`public=False`).
+Changed the model default in `models.py` from `True` to `False`.
+
+**Reasoning:** CineLog is social, but a watchlist is a list of films a user
+*hasn't* watched yet — it's aspirational and often personal (guilty pleasures,
+films you're embarrassed to admit you haven't seen). By the principle of least
+surprise, a user saving a film for later doesn't expect that action to broadcast
+anything. Privacy-by-default treats sharing as a deliberate choice the user
+opts into, which builds trust — the safer default when we're unsure, because a
+user can always make a list public, but can't un-share something that was
+exposed without their intent.
+
+**Tradeoff acknowledged:** This weakens the social/discovery angle out of the
+box — public feeds and "what are my friends planning to watch" stay empty until
+users actively opt in, so the feature's social value is deferred rather than
+immediate. If CineLog's product strategy is explicitly discovery-first, that's a
+real cost; I'd mitigate it by making the "make public" toggle prominent in the
+UI rather than by flipping the default back.
 
 ## Comment 5 — Sort order
-**My position:**
-**Reasoning:**
-**Engagement with reviewer's point:**
+> DRAFT — rewrite in my own words before submitting (see AI Usage note).
+
+**My position:** Agree with the maintainer — sort by **date added, newest
+first**. Changed `get_watchlist()` from `order_by(Film.title.asc())` to
+`order_by(WatchlistEntry.date_added.desc())`.
+
+**Reasoning:** A watchlist is a queue of intent. When someone opens it, the most
+useful thing to surface is what they most recently decided they wanted to watch —
+that's freshest in their mind. There's also a consistency argument the reviewer
+didn't raise: `get_collection()` already sorts `date_added.desc()`, so matching
+it means the whole app orders user lists the same way, which is less surprising
+than having two lists sort by two different rules.
+
+**Engagement with reviewer's point:** The reviewer's reasoning ("most users want
+to see what they added recently") is exactly right, so I'm implementing their
+preference, not just agreeing rhetorically. I did consider keeping alphabetical:
+it's genuinely better for *finding one specific known title* in a long list.
+But that's a search/filter problem, better solved with a search box later, not
+by making the default sort optimize for the rarer case. I also considered
+oldest-first (treat it as a FIFO backlog), but rejected it — recency matches
+both the reviewer's point and `get_collection`, so newest-first is the most
+consistent, least-surprising choice.
 
 ## Comment 6 — Rebase
 **What conflicted:** `git fetch origin` + `git rebase origin/main` replayed my 6

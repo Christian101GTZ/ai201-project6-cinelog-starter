@@ -8,7 +8,7 @@ collection service, it sits between the web routes and the database.
 
 What it provides:
   - add_to_watchlist(...)  : add a film to the watchlist (blocks duplicates)
-  - get_watchlist(...)     : list a user's saved films, sorted A–Z by title
+  - get_watchlist(...)     : list a user's saved films, newest-added first
 
 It reuses FilmNotFoundError from the collection service rather than defining
 its own copy.
@@ -73,13 +73,12 @@ def get_watchlist(user_id):
     Returns:
         list[dict]: List of film dicts with watchlist metadata attached.
     """
-    # Get all of this user's watchlist entries. .join(Film) links each entry
-    # to its film so we can sort by film title alphabetically (.asc()).
+    # Get all of this user's watchlist entries, newest-added first (.desc()).
+    # This matches get_collection's ordering for consistency across the app.
     entries = (
         WatchlistEntry.query
         .filter_by(user_id=user_id)
-        .join(Film)
-        .order_by(Film.title.asc())
+        .order_by(WatchlistEntry.date_added.desc())
         .all()
     )
 
