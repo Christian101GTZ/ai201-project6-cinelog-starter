@@ -105,7 +105,7 @@ both the reviewer's point and `get_collection`, so newest-first is the most
 consistent, least-surprising choice.
 
 ## Comment 6 — Rebase
-**What conflicted:** `git fetch origin` + `git rebase origin/main` replayed my 6
+**What conflicted:** `git fetch origin` + `git rebase origin/main` replayed my
 branch commits onto main, which now contains
 `07ca580 refactor: migrate film IDs from integer to UUID`. The conflict landed
 in `models.py`: main defines `Film.id` and `CollectionEntry.film_id` as
@@ -121,12 +121,82 @@ watchlist code that still assumed integers: the `film_id` docstring in
 `add_to_watchlist`, the request-body doc in `routes/watchlist/watchlist.py`, and
 the nonexistent-film test (now uses a UUID string, not `999999`).
 
-**How I verified no conflict remains:** `git log --oneline --graph` shows my 6
+**How I verified no conflict remains:** `git log --oneline --graph` shows my
 commits linear on top of `origin/main` with no merge commit introduced by me.
 `grep` for `Integer` / `<int>` / `999999` in the watchlist files returns only
 the legitimate integer columns (`year`, `rating`) — no `film_id` integers left.
 `pytest tests/ -v` → 7 passed. A safety branch `backup/pre-rebase-watchlist`
 was created before rebasing.
 
+## Commit History
+`git log --oneline` on `feature/watchlist` (rewritten, conventional, no merge commits):
+
+```
+58dfb67 docs: add PR description and commit history to pr-response
+88f99fb feat: default watchlists to private and order by date added
+2c69c0e docs: record rebase resolution in pr-response
+b45bc90 fix: update watchlist film_id references to UUID after main refactor
+a6e42c4 test: add watchlist service tests for add_to_watchlist
+203667e fix: add deduplication check to prevent duplicate watchlist entries
+a7555a1 refactor: rename save_to_watchlist to add_to_watchlist per naming convention
+0bf52ec feat: add watchlist model, service, and endpoint
+```
+<!-- Replace this code block with a SCREENSHOT of `git log --oneline` before submitting.
+     (Commit hashes will differ again after you re-type Comment 2 and rewrite Comments 4 & 5.) -->
+
 ## PR Description
-<!-- Written at the end — feature overview, design decisions, manual testing steps -->
+
+### What the watchlist feature does
+Lets a user save films they want to watch **later** — a "watchlist" that is
+separate from their collection of already-watched films. It adds:
+
+- a `WatchlistEntry` model (linking a user to a film, with a `date_added`
+  timestamp and a `public` visibility flag),
+- service functions `add_to_watchlist(user_id, film_id)` and
+  `get_watchlist(user_id)`, and
+- two REST endpoints:
+  - `POST /watchlist/<user_id>/add` — body `{ "film_id": "<uuid>" }` — save a film,
+  - `GET /watchlist/<user_id>` — list the user's watchlist.
+
+Saving a film that doesn't exist raises `FilmNotFoundError`; saving a film that's
+already on the list raises `AlreadyInWatchlistError` (no duplicate is created).
+Film IDs are UUIDs, consistent with the main-branch refactor.
+
+### Design decisions
+1. **Default visibility → private (`public=False`).** A watchlist is aspirational
+   and often personal, and by the principle of least surprise a user saving a film
+   shouldn't broadcast it. Sharing is an explicit opt-in. (Tradeoff: social
+   discovery is weaker out of the box — see Comment 4.)
+2. **Sort order → date added, newest first.** Matches the maintainer's preference
+   and `get_collection()`'s ordering, so both user lists behave consistently.
+   (See Comment 5.)
+
+### How to manually test
+1. Install dependencies and start the app:
+   ```
+   pip install -r requirements.txt
+   python app.py        # serves at http://localhost:5000
+   ```
+2. There are no create endpoints for users/films, so seed one of each in a shell
+   (in a second terminal) and note the printed IDs:
+   ```
+   python -c "from app import create_app, db; from models import User, Film; \
+   app=create_app(); ctx=app.app_context(); ctx.push(); \
+   u=User(username='alice', email='alice@example.com'); f=Film(title='Dune', year=2021, genre='Sci-Fi'); \
+   db.session.add_all([u,f]); db.session.commit(); print('USER', u.id); print('FILM', f.id)"
+   ```
+3. **Add to watchlist** (expect `201` and `"public": false`):
+   ```
+   curl -X POST http://localhost:5000/watchlist/<USER_ID>/add \
+        -H "Content-Type: application/json" -d "{\"film_id\": \"<FILM_ID>\"}"
+   ```
+4. **View watchlist** (expect the film, newest-added first):
+   ```
+   curl http://localhost:5000/watchlist/<USER_ID>
+   ```
+5. **Verify deduplication:** run the same POST from step 3 again, then GET again —
+   the watchlist should still contain only **one** entry for that film.
+6. (Optional) Add a second film, then GET — confirm the **most recently added**
+   film appears first (date-added ordering).
+
+You can also run the automated tests: `pytest tests/ -v` (7 passing).
