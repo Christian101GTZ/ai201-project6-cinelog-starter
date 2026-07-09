@@ -53,9 +53,28 @@ the Comment 2 behavior.
 **Engagement with reviewer's point:**
 
 ## Comment 6 — Rebase
-**What conflicted:**
-**How I resolved it:**
-**How I verified no conflict remains:**
+**What conflicted:** `git fetch origin` + `git rebase origin/main` replayed my 6
+branch commits onto main, which now contains
+`07ca580 refactor: migrate film IDs from integer to UUID`. The conflict landed
+in `models.py`: main defines `Film.id` and `CollectionEntry.film_id` as
+`String(36)` UUIDs, while my branch still had them (and `WatchlistEntry.film_id`)
+as `Integer`. (I also had to remove an untracked local `.gitignore` first, since
+main now tracks one.)
+
+**How I resolved it:** Took main's UUID types as the source of truth. In the
+resolved `models.py`, `Film.id`, `CollectionEntry.film_id`, and
+`WatchlistEntry.film_id` are all `db.String(36)`; kept my explanatory comments
+but corrected the ones that claimed film IDs were integers. Then updated the
+watchlist code that still assumed integers: the `film_id` docstring in
+`add_to_watchlist`, the request-body doc in `routes/watchlist/watchlist.py`, and
+the nonexistent-film test (now uses a UUID string, not `999999`).
+
+**How I verified no conflict remains:** `git log --oneline --graph` shows my 6
+commits linear on top of `origin/main` with no merge commit introduced by me.
+`grep` for `Integer` / `<int>` / `999999` in the watchlist files returns only
+the legitimate integer columns (`year`, `rating`) — no `film_id` integers left.
+`pytest tests/ -v` → 7 passed. A safety branch `backup/pre-rebase-watchlist`
+was created before rebasing.
 
 ## PR Description
 <!-- Written at the end — feature overview, design decisions, manual testing steps -->
