@@ -124,6 +124,11 @@ class WatchlistEntry(db.Model):
     # users opt in to sharing (principle of least surprise / privacy by default).
     public = db.Column(db.Boolean, default=False)
 
+    # Shortcut link so entry.film resolves to the related Film (mirrors the
+    # CollectionEntry backref on Film). Without this, get_watchlist() raises
+    # AttributeError when it calls entry.film.
+    film = db.relationship("Film", backref="watchlist_entries", lazy=True)
+
     # Turns this entry into a plain dictionary (for JSON responses).
     def to_dict(self):
         return {

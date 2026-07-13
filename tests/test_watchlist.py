@@ -86,6 +86,28 @@ def test_add_to_watchlist_nonexistent_film_raises(app, sample_user):
             add_to_watchlist(user_id=sample_user, film_id=fake_film_id)
 
 
+# ── Retrieval ─────────────────────────────────────────────────────────────────
+
+def test_get_watchlist_returns_added_film(app, sample_user, sample_film):
+    """
+    get_watchlist should return the films a user has saved, with the film's
+    details plus the watchlist metadata (date_added, public) attached.
+
+    Regression test: get_watchlist relies on entry.film, which requires the
+    WatchlistEntry.film relationship to be defined on the model.
+    """
+    with app.app_context():
+        add_to_watchlist(user_id=sample_user, film_id=sample_film)
+
+        result = get_watchlist(sample_user)
+
+        assert len(result) == 1
+        assert result[0]["id"] == sample_film
+        assert result[0]["title"] == "Paddington 2"
+        assert result[0]["public"] is False  # private by default
+        assert "date_added" in result[0]
+
+
 # ── Deduplication ─────────────────────────────────────────────────────────────
 
 def test_add_to_watchlist_duplicate_raises(app, sample_user, sample_film):
