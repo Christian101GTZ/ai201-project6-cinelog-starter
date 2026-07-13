@@ -117,33 +117,36 @@ UI rather than by flipping the default back.
 first**. Changed `get_watchlist()` from `order_by(Film.title.asc())` to
 `order_by(WatchlistEntry.date_added.desc())`.
 
-**Reasoning (use-case first):** A watchlist is a queue of intent, and the most
-common interaction is a quick glance — "what did I just add / what's on here?" —
-not hunting for one specific title. Newest-first serves that glance directly:
-the film freshest in the user's mind sits at the top. That's the primary reason,
-and it's about what the list is *for*, not about matching another table.
+**Reasoning:** To me, a watchlist is basically a queue of movies someone is
+planning to watch. Most of the time when a user opens it, they just want a quick
+look at what's on there or what they recently added—not to hunt down one
+specific title. Sorting newest first fits that. The movie they just added, which
+is probably still on their mind, shows up right at the top. That's my main
+reason, and it comes from what the list is actually used for, not from trying to
+match another table.
 
-**Consistency is a supporting point, not the main one.** `get_collection()`
-already sorts `date_added.desc()`, so newest-first also keeps both user lists
-ordered the same way. I'm deliberately listing this second, because I don't
-think "match the collection" would be a good enough reason on its own — the two
-lists do different jobs (the collection is an archival log of what you *watched*;
-the watchlist is a queue of what you *intend* to watch), and symmetry between
-them is only worth having when it doesn't fight the watchlist's purpose. Here it
-doesn't, so it's a nice bonus rather than the argument.
+**On consistency:** It's also true that `get_collection()` already sorts by date
+added, newest first, so this keeps both lists behaving the same way. I'm putting
+this second on purpose, though, because I don't think "just match the collection"
+is a strong enough reason on its own. The two lists aren't really doing the same
+job—the collection is a record of what you've already watched, while the
+watchlist is a list of what you still want to watch. Matching them only makes
+sense when it doesn't get in the way of what the watchlist is for. Here it
+doesn't, so I see it as a nice bonus rather than the actual argument.
 
-**Engagement with the reviewer + alternatives I rejected:** The reviewer's
-reasoning ("most users want to see what they added recently") matches my
-use-case argument, so I'm implementing their preference on the merits, not just
-deferring. I considered **alphabetical**: it genuinely helps find one known
-title in a long list — but that's a search/filter job, and CineLog has no search
-box today, so optimizing the default sort for the rarer "find a specific film"
-case would hurt the common glance case now in exchange for a benefit a future
-search box would deliver better. I also seriously considered **oldest-first**
-(treat the watchlist as a FIFO backlog to clear, so old intentions don't sink
-out of sight) — this is the strongest counter to newest-first, and if CineLog
-later framed the watchlist explicitly as a "backlog to finish," I'd revisit it.
-For the current glance-oriented use case, newest-first wins.
+**Engaging with the reviewer and other options:** The maintainer's point—that
+most users want to see what they recently added—lines up with my own reasoning,
+so I'm going with their preference because I genuinely agree with it, not just to
+avoid pushing back. I did think about keeping it alphabetical. That's useful if
+you're trying to find one specific title in a long list, but that's really more
+of a search feature, and CineLog doesn't have a search box right now. Optimizing
+the default sort for the less common "find a specific movie" case would make the
+more common quick-glance case worse, and a search box would handle that better
+later anyway. I also considered oldest first, treating the watchlist like a
+backlog you work through so older picks don't get buried. That's the strongest
+argument against newest first, and if CineLog ever clearly framed the watchlist
+as a "backlog to finish," I'd reconsider. But for how it's used now, newest first
+makes the most sense.
 
 ## Comment 6 — Rebase
 **What conflicted:** `git fetch origin` + `git rebase origin/main` replayed my
