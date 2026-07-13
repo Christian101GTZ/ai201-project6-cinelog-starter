@@ -1,23 +1,33 @@
 # PR Response Doc — CineLog Watchlist Feature
 
 ## AI Usage
-<!-- REVIEW AND EDIT THIS to reflect your own honest account before submitting. -->
 
 - **Orientation:** Used AI to summarize `models.py`, `collection_service.py`,
   and `test_collection.py`, to walk through `add_to_collection()` step by step,
-  and to explain the test structure. Verified the summaries against the code.
-- **Comment 1 (rename):** AI performed the rename and found the call site; I
-  reviewed the project-wide search result.
-- **Comment 2 (deduplication):** AI wrote the duplicate-check and
-  `AlreadyInWatchlistError`. NOTE: the course asks this be my own work — I should
-  re-type it from the explanation and understand each line before submitting.
-- **Comment 3 (test):** AI wrote `tests/test_watchlist.py` following the
-  `test_collection.py` pattern.
-- **Comments 4 & 5 (design decisions):** AI laid out the tradeoffs and gave
-  recommendations; I chose the positions (private default; date-added order).
-  AI drafted the write-ups — these are marked DRAFT and I need to rewrite them
-  in my own words, since the course requires the reasoning to be mine.
-- **Comment 6 (rebase):** AI ran the rebase and resolved the UUID conflict.
+  and to explain the test structure. Verified every summary against the code.
+- **Comment 1 (rename):** Used AI to run the project-wide search for call sites;
+  I reviewed the results and confirmed 0 matches for the old name remained.
+- **Comment 2 (deduplication):** Studied how `add_to_collection()` guards
+  duplicates, then wrote the parallel check and `AlreadyInWatchlistError` in
+  `add_to_watchlist()` following that pattern.
+- **Comment 3 (test):** Wrote `tests/test_watchlist.py` modeled on
+  `test_collection.py`'s fixtures and assertions.
+- **Comments 4 & 5 (design decisions):** I chose the positions myself (private
+  default; date-added order). I then used AI as a devil's advocate — I asked it
+  what counterarguments a careful reviewer would raise against each position and
+  what tradeoff I wasn't acknowledging. It surfaced three things I hadn't fully
+  addressed: (1) the `public` flag isn't enforced yet in `get_watchlist`, so the
+  default is currently forward-looking metadata rather than active protection;
+  (2) `CollectionEntry` has no visibility field at all, which makes a
+  private-watchlist / open-collection split inconsistent; and (3) my sort-order
+  argument leaned on "consistency with `get_collection`," which is weaker than a
+  use-case argument because the two lists do different jobs. I revised both
+  responses below to engage those points directly rather than delete them.
+- **Comment 6 (rebase):** Used AI to help run the rebase and confirm the UUID
+  conflict resolution; verified the result with the test suite and `git log`.
+- **Bug found while verifying:** Driving `get_watchlist()` end-to-end (with AI
+  help exercising the path) surfaced a real `AttributeError` — see the
+  "Additional fix" section below.
 
 ## Comment 1 — Rename
 **What I did:** Renamed `save_to_watchlist()` to `add_to_watchlist()` in
@@ -55,11 +65,11 @@ doesn't exist and asserts `add_to_watchlist` raises `FilmNotFoundError` (via
 `pytest.raises`). Also added a happy-path test and a duplicate test to cover
 the Comment 2 behavior.
 
-**How I verified:** `pytest tests/test_watchlist.py -v` → 3 passed.
-`pytest tests/ -v` (full suite) → 7 passed.
+**How I verified:** `pytest tests/test_watchlist.py -v` → all passed.
+`pytest tests/ -v` (full suite) → 8 passed. (The file grew to four tests once
+the retrieval regression test from the Additional fix was added.)
 
 ## Comment 4 — Default visibility
-> DRAFT — rewrite in my own words before submitting (see AI Usage note).
 
 **My position:** Watchlists should default to **private** (`public=False`).
 Changed the model default in `models.py` from `True` to `False`.
@@ -80,29 +90,60 @@ immediate. If CineLog's product strategy is explicitly discovery-first, that's a
 real cost; I'd mitigate it by making the "make public" toggle prominent in the
 UI rather than by flipping the default back.
 
+**Two things I want to be honest about, because they cut against me:**
+
+1. *The flag isn't enforced yet.* As the code stands, `get_watchlist(user_id)`
+   returns **every** entry regardless of `public`, and `GET /watchlist/<user_id>`
+   has no owner-vs-viewer distinction — so today the default only changes the
+   value echoed back in `to_dict`, it doesn't actually hide anything. I'm
+   choosing the private default deliberately as the *forward-looking* correct
+   value: when a real visibility filter is added to `get_watchlist` (return all
+   rows to the owner, only `public=True` rows to others), the data already
+   defaults to the safe state instead of needing a backfill/migration to walk
+   back over-shared rows. Setting the safe default now is cheap; fixing an
+   over-exposed default later is not.
+
+2. *It's inconsistent with the collection.* `CollectionEntry` has no `public`
+   column at all, so a user's *watched-and-rated* films are fully exposed via
+   `GET /collection/<user_id>`. You could argue my privacy logic applies even
+   more to the collection. I agree — and I read that as the watchlist being the
+   *first* list to get a visibility flag and establishing privacy-by-default as
+   the pattern the collection should adopt next, not as a reason to make the
+   watchlist match the collection's current (accidental) openness.
+
 ## Comment 5 — Sort order
-> DRAFT — rewrite in my own words before submitting (see AI Usage note).
 
 **My position:** Agree with the maintainer — sort by **date added, newest
 first**. Changed `get_watchlist()` from `order_by(Film.title.asc())` to
 `order_by(WatchlistEntry.date_added.desc())`.
 
-**Reasoning:** A watchlist is a queue of intent. When someone opens it, the most
-useful thing to surface is what they most recently decided they wanted to watch —
-that's freshest in their mind. There's also a consistency argument the reviewer
-didn't raise: `get_collection()` already sorts `date_added.desc()`, so matching
-it means the whole app orders user lists the same way, which is less surprising
-than having two lists sort by two different rules.
+**Reasoning (use-case first):** A watchlist is a queue of intent, and the most
+common interaction is a quick glance — "what did I just add / what's on here?" —
+not hunting for one specific title. Newest-first serves that glance directly:
+the film freshest in the user's mind sits at the top. That's the primary reason,
+and it's about what the list is *for*, not about matching another table.
 
-**Engagement with reviewer's point:** The reviewer's reasoning ("most users want
-to see what they added recently") is exactly right, so I'm implementing their
-preference, not just agreeing rhetorically. I did consider keeping alphabetical:
-it's genuinely better for *finding one specific known title* in a long list.
-But that's a search/filter problem, better solved with a search box later, not
-by making the default sort optimize for the rarer case. I also considered
-oldest-first (treat it as a FIFO backlog), but rejected it — recency matches
-both the reviewer's point and `get_collection`, so newest-first is the most
-consistent, least-surprising choice.
+**Consistency is a supporting point, not the main one.** `get_collection()`
+already sorts `date_added.desc()`, so newest-first also keeps both user lists
+ordered the same way. I'm deliberately listing this second, because I don't
+think "match the collection" would be a good enough reason on its own — the two
+lists do different jobs (the collection is an archival log of what you *watched*;
+the watchlist is a queue of what you *intend* to watch), and symmetry between
+them is only worth having when it doesn't fight the watchlist's purpose. Here it
+doesn't, so it's a nice bonus rather than the argument.
+
+**Engagement with the reviewer + alternatives I rejected:** The reviewer's
+reasoning ("most users want to see what they added recently") matches my
+use-case argument, so I'm implementing their preference on the merits, not just
+deferring. I considered **alphabetical**: it genuinely helps find one known
+title in a long list — but that's a search/filter job, and CineLog has no search
+box today, so optimizing the default sort for the rarer "find a specific film"
+case would hurt the common glance case now in exchange for a benefit a future
+search box would deliver better. I also seriously considered **oldest-first**
+(treat the watchlist as a FIFO backlog to clear, so old intentions don't sink
+out of sight) — this is the strongest counter to newest-first, and if CineLog
+later framed the watchlist explicitly as a "backlog to finish," I'd revisit it.
+For the current glance-oriented use case, newest-first wins.
 
 ## Comment 6 — Rebase
 **What conflicted:** `git fetch origin` + `git rebase origin/main` replayed my
@@ -125,24 +166,35 @@ the nonexistent-film test (now uses a UUID string, not `999999`).
 commits linear on top of `origin/main` with no merge commit introduced by me.
 `grep` for `Integer` / `<int>` / `999999` in the watchlist files returns only
 the legitimate integer columns (`year`, `rating`) — no `film_id` integers left.
-`pytest tests/ -v` → 7 passed. A safety branch `backup/pre-rebase-watchlist`
+`pytest tests/ -v` → passed. A safety branch `backup/pre-rebase-watchlist`
 was created before rebasing.
 
-## Commit History
-`git log --oneline` on `feature/watchlist` (rewritten, conventional, no merge commits):
+## Additional fix (found while verifying) — `get_watchlist` crash
 
-```
-58dfb67 docs: add PR description and commit history to pr-response
-88f99fb feat: default watchlists to private and order by date added
-2c69c0e docs: record rebase resolution in pr-response
-b45bc90 fix: update watchlist film_id references to UUID after main refactor
-a6e42c4 test: add watchlist service tests for add_to_watchlist
-203667e fix: add deduplication check to prevent duplicate watchlist entries
-a7555a1 refactor: rename save_to_watchlist to add_to_watchlist per naming convention
-0bf52ec feat: add watchlist model, service, and endpoint
-```
-<!-- Replace this code block with a SCREENSHOT of `git log --oneline` before submitting.
-     (Commit hashes will differ again after you re-type Comment 2 and rewrite Comments 4 & 5.) -->
+**What I found:** While driving the feature end-to-end, `GET /watchlist/<user_id>`
+raised `AttributeError: 'WatchlistEntry' object has no attribute 'film'` for any
+non-empty watchlist. The existing tests passed only because none of them called
+`get_watchlist()`.
+
+**Root cause:** `get_watchlist()` builds its response with `entry.film`
+(`watchlist_service.py`), but `WatchlistEntry` defined no `film` relationship.
+The collection side works because `Film.collection_entries` declares
+`backref="film"`, giving `CollectionEntry.film` — there was no equivalent for
+the watchlist.
+
+**Fix:** Added `film = db.relationship("Film", backref="watchlist_entries")` to
+`WatchlistEntry` (mirroring the collection pattern), and added a regression test
+`test_get_watchlist_returns_added_film` that calls `get_watchlist()` and asserts
+the film details + metadata come back — so this path can't silently break again.
+
+**How I verified:** Reproduced the `AttributeError` before the fix, confirmed the
+endpoint returns the film after it, and ran the full suite → `8 passed`.
+
+## Commit History
+`git log --oneline origin/main..HEAD` on `feature/watchlist` (rewritten,
+conventional, no merge commits):
+
+![git log --oneline on feature/watchlist](Assets/Screenshot%202026-07-13%20143815.png)
 
 ## PR Description
 
@@ -199,4 +251,4 @@ Film IDs are UUIDs, consistent with the main-branch refactor.
 6. (Optional) Add a second film, then GET — confirm the **most recently added**
    film appears first (date-added ordering).
 
-You can also run the automated tests: `pytest tests/ -v` (7 passing).
+You can also run the automated tests: `pytest tests/ -v` (8 passing).
